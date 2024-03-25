@@ -68,7 +68,8 @@ impl TryFrom<&HotkeyBinding> for HkmData {
     fn try_from(value: &HotkeyBinding) -> Result<Self, Self::Error> {
         let (trigger, mods) = value.keys.split_last().unwrap();
         let mut mod_keys = Modifiers::empty();
-        let vkey = key_code_from_string(&trigger).unwrap();
+        let vkey =
+            key_code_from_string(&trigger).expect(format!("invalid key: {trigger}").as_str());
         for m in mods {
             mod_keys |= modifier_from_string(m);
         }
@@ -118,7 +119,19 @@ fn key_code_from_string(key: &str) -> Option<Code> {
         "x" => Some(Code::KeyX),
         "y" => Some(Code::KeyY),
         "z" => Some(Code::KeyZ),
+        "0" => Some(Code::Digit0),
+        "1" => Some(Code::Digit1),
+        "2" => Some(Code::Digit2),
+        "3" => Some(Code::Digit3),
+        "4" => Some(Code::Digit4),
+        "5" => Some(Code::Digit5),
+        "6" => Some(Code::Digit6),
+        "7" => Some(Code::Digit7),
+        "8" => Some(Code::Digit8),
+        "9" => Some(Code::Digit9),
         "escape" => Some(Code::Escape),
+        "esc" => Some(Code::Escape),
+        "return" => Some(Code::Enter),
         _ => Code::from_str(key).ok(),
     }
 }
