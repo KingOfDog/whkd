@@ -35,4 +35,11 @@ alt + h : komorebic focus left
 alt + j : komorebic focus down
 alt + k : komorebic focus up
 alt + l : komorebic focus right
+
+# single key shortcuts
+F11 : echo "fullscreen"
+
+# switch mode
+alt + w ; window
+window > h : komorebic focus left
 ```
