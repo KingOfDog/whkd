@@ -13,6 +13,7 @@ use global_hotkey::hotkey::HotKey;
 use global_hotkey::hotkey::Modifiers;
 use global_hotkey::GlobalHotKeyEvent;
 use global_hotkey::GlobalHotKeyManager;
+use global_hotkey::HotKeyState;
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -261,31 +262,31 @@ fn main() -> Result<()> {
     event_loop
         .run(move |_event, _| {
             if let Ok(event) = channel.try_recv() {
-                println!("{event:?}");
+                if event.state() == HotKeyState::Pressed {
+                    let hotkey = {
+                        let hotkeys = mode_manager.hotkeys.lock();
+                        hotkeys
+                            .iter()
+                            .find(|(_, v)| v.id() == event.id)
+                            .unwrap()
+                            .0
+                            .clone()
+                    };
 
-                let hotkey = {
-                    let hotkeys = mode_manager.hotkeys.lock();
-                    hotkeys
-                        .iter()
-                        .find(|(_, v)| v.id() == event.id)
-                        .unwrap()
-                        .0
-                        .clone()
-                };
+                    if let Some(cmd) = &hotkey.command {
+                        if let Some(session_stdin) = SESSION_STDIN.lock().as_mut() {
+                            if matches!(whkdrc.shell, Shell::Pwsh | Shell::Powershell) {
+                                println!("{cmd}");
+                            }
 
-                if let Some(cmd) = &hotkey.command {
-                    if let Some(session_stdin) = SESSION_STDIN.lock().as_mut() {
-                        if matches!(whkdrc.shell, Shell::Pwsh | Shell::Powershell) {
-                            println!("{cmd}");
+                            writeln!(session_stdin, "{cmd}").expect("failed to execute command");
                         }
-
-                        writeln!(session_stdin, "{cmd}").expect("failed to execute command");
                     }
-                }
 
-                if let Some(cmd) = &hotkey.internal_action {
-                    println!("setting mode to {cmd:?}");
-                    mode_manager.activate_mode(cmd).unwrap();
+                    if let Some(cmd) = &hotkey.internal_action {
+                        println!("setting mode to {cmd:?}");
+                        mode_manager.activate_mode(cmd).unwrap();
+                    }
                 }
             }
         })
@@ -329,33 +330,25 @@ impl ModeManager {
     }
 
     fn activate_mode(&self, mode: &Option<String>) -> Result<(), HkError> {
-        let lock = &self.hotkeys.lock();
+        let hotkeys = &self.hotkeys.lock();
 
-        self.hotkeys_manager.unregister_all(
-            self.binding_map
-                .get(&self.mode.lock())
-                .map_or(Vec::new(), |v| {
-                    v.iter()
-                        .map(|h| lock.get(h).unwrap())
-                        .cloned()
-                        .collect::<Vec<_>>()
-                })
-                .as_slice(),
-        );
+        if let Some(mode_bindings) = self.binding_map.get(&self.mode.lock()) {
+            for hotkey in mode_bindings.iter().map(|h| hotkeys.get(h).unwrap()) {
+                if let Err(err) = self.hotkeys_manager.unregister(*hotkey) {
+                    println!("Error while unregistering: {err}");
+                }
+            }
+        }
 
         *self.mode.lock() = mode.clone();
 
-        self.hotkeys_manager.register_all(
-            self.binding_map
-                .get(mode)
-                .map_or(Vec::new(), |v| {
-                    v.iter()
-                        .map(|h| lock.get(h).unwrap())
-                        .cloned()
-                        .collect::<Vec<_>>()
-                })
-                .as_slice(),
-        );
+        if let Some(mode_bindings) = self.binding_map.get(mode) {
+            for hotkey in mode_bindings.iter().map(|h| hotkeys.get(h).unwrap()) {
+                if let Err(err) = self.hotkeys_manager.register(*hotkey) {
+                    println!("Error while registering: {err}");
+                }
+            }
+        }
 
         Ok(())
     }
